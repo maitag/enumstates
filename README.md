@@ -11,8 +11,6 @@ stateDiagram-v2
 state PlayerStateMachine {
 	state movement {
 		[*] --> Grounded
-		Grounded : entry / onEnter_movement_Grounded()
-		Grounded : exit / onExit_movement_Grounded()
 		state Grounded {
 			[*] --> Idle
 			Running : entry / PlayAnim("run"), SetDustTrail(true)
@@ -23,7 +21,11 @@ state PlayerStateMachine {
 			Rising : entry / PlayAnim("jump_up")
 			Falling : entry / PlayAnim("fall_down")
 		}
-
+		note right of Grounded
+			entry / onEnter_movement_Grounded()
+			exit / onExit_movement_Grounded()
+		end note
+		
 		Grounded --> Rising : Jump [action == Ready]
 		Idle --> Running : StartRun(speed)
 		Running --> Idle : StopRun
