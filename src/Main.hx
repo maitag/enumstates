@@ -130,7 +130,7 @@ class Main extends Application {
 		trace("=== 1. Start (Grounded -> Idle) ===");
 		var p = new PlayerStateMachine(eff -> trace('  [EFFECT] $eff'));
 
-		trace("\n=== 2. Losrennen (Grounded bleibt aktiv -> nur Running-Hook feuert!) ===");
+		trace("\n=== 2. start running (Grounded keeps active -> only Running-Hook triggers) ===");
 		p.send(StartRun(6.5));
 		trace('  State: ${p.movement}');
 
@@ -138,25 +138,30 @@ class Main extends Application {
 		// var json = p.toJson(true);
 		// trace(json);
 
-		trace("\n=== 4. Absprung aus dem Rennen (Exit Running -> Exit Grounded -> Enter Rising) ===");
+		trace("\n=== 4. start jumping while running  (Exit Running -> Exit Grounded -> Enter Rising) ===");
 		p.send(Jump);
 
-		trace("\n=== 5. Scheitelpunkt überschreiten (Rising -> Falling) ===");
+		trace("\n=== 5. peak is passed (Rising -> Falling) ===");
 		p.timerStep(1.2);
 		trace('  State: ${p.movement}');
 
-		trace("\n=== 6. Landen (Enter Grounded -> Enter Idle) ===");
+		trace("\n=== 6. landing (Enter Grounded -> Enter Idle) ===");
 		p.send(Land);
 
-		trace("\n=== final STATE ===\n" + p.toJson(true));
+		// trace("\n=== final STATE ===\n" + p.toJson(true));
 		
 		// debug
 		//trace(p.getGeneratedCode());
 
+		// print uml diagram
+		trace("\n"+p.toMermaid());
+		// trace(p.toMermaid(false, false)); // without 
+
+
 		// test
-		Test.run();
+		// Test.run();
 
 		// bench
-		Benchs.run(10000, 600);
+		// Benchs.run(10000, 600);
 	}
 }

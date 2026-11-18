@@ -122,7 +122,7 @@ class Benchs {
 		trace('  instantiating:    ${Math.round(createMs * 100) / 100} ms');
 		trace('  total time:       ${Math.round(totalMs * 100) / 100} ms');
 		trace('  time per frame:   ${Math.round(msPerFrame * 1000) / 1000} ms (budget at 60 FPS: 16.67 ms)');
-		trace('  updatesPerSek:    ${Math.round(updatesPerSec / 1000)} k');
+		trace('  updatesPerSecond: ${Math.round(updatesPerSec / 1000)} k');
 		trace('  triggered attacks:$totalAttacks');
 	}
 }

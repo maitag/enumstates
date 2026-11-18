@@ -52,18 +52,25 @@ class EnumStatesMacro {
 			pos:Position
 		}> = [];
 
+		// mermaid:
+		var regionInits = new Map<String, Null<Expr>>();
+		var allFunctions = new Map<String, Function>();
+
 		// 2. traverse fields, inline methods and optimize tupel-switches
 		for (field in fields) {
 			var isRegion = field.meta != null && Lambda.exists(field.meta, m -> m.name == ":region");
 			if (isRegion) {
 				switch (field.kind) {
-					case FVar(t, _):
+					// case FVar(t, _):
+					case FVar(t, e):
 						if (t == null)
 							Context.error('Region "${field.name}" needs explicite Enum-typ.', field.pos);
 						if (regionNames.exists(field.name))
 							Context.error('double region "${field.name}".', field.pos);
 						regions.push({name: field.name, type: t, pos: field.pos});
 						regionNames.set(field.name, true);
+						// mermaid:
+						regionInits.set(field.name, e);
 					default:
 						Context.error("@:region has to use only on vars.", field.pos);
 				}
@@ -81,6 +88,14 @@ class EnumStatesMacro {
 						if (field.access.indexOf(AInline) == -1)
 							field.access.push(AInline);
 					}
+
+					// mermaid:
+					allFunctions.set(field.name, {
+						args: fn.args,
+						ret: fn.ret,
+						expr: fn.expr != null ? ExprTools.map(fn.expr, e -> e) : null,
+						params: fn.params
+					});
 
 					if (isUpdate && fn.expr != null) {
 						fn.expr = optimizeTupleSwitches(fn.expr);
@@ -152,7 +167,8 @@ class EnumStatesMacro {
 		var serializeFieldExprs:Array<ObjectField> = [];
 		var deserializeExprs:Array<Expr> = [];
 
-		for (reg in regions) {
+		for (reg in regions)
+		{
 			var rName = reg.name;
 			var prevVar = '_prev_$rName';
 			var nextVar = '_next_$rName';
@@ -360,6 +376,22 @@ class EnumStatesMacro {
 			}
 		};
 		fields.push(debugClass.fields[0]);
+
+		// mermaid:
+		var mermaidFull = generateMermaidDiagram(localClass.name, regions, regionInits, allFunctions, enterHooks, exitHooks, true, true);
+		var mermaidNoHooks = generateMermaidDiagram(localClass.name, regions, regionInits, allFunctions, enterHooks, exitHooks, false, true);
+		var mermaidNoGuards = generateMermaidDiagram(localClass.name, regions, regionInits, allFunctions, enterHooks, exitHooks, true, false);
+		var mermaidCompact = generateMermaidDiagram(localClass.name, regions, regionInits, allFunctions, enterHooks, exitHooks, false, false);
+
+		var mermaidClass = macro class {
+			public function toMermaid(showHooks: Bool = true, showGuards: Bool = true): String {
+				return if (showHooks && showGuards) $v{mermaidFull}
+					else if (!showHooks && showGuards) $v{mermaidNoHooks}
+					else if (showHooks && !showGuards) $v{mermaidNoGuards}
+					else $v{mermaidCompact};
+			}
+		};
+		for (f in mermaidClass.fields) fields.push(f);
 
 		return fields;
 	}
@@ -704,5 +736,350 @@ class EnumStatesMacro {
 		} catch (e:Dynamic) return null;
 	}
 
+
+
+	// -----------------------------------------------------------------
+	// -------------------- generate mermaid UML -----------------------
+	// -----------------------------------------------------------------
+
+	private static function generateMermaidDiagram(
+		className:String,
+		regions:Array<{name:String, type:ComplexType, pos:Position}>,
+		regionInits:Map<String, Null<Expr>>,
+		allFunctions:Map<String, Function>,
+		enterHooks:Map<String, Array<HookInfo>>,
+		exitHooks:Map<String, Array<HookInfo>>,
+		showHooks:Bool,
+		showGuards:Bool
+	):String {
+		var buf = new StringBuf();
+		buf.add("stateDiagram-v2\n");
+		buf.add('    [*] --> $className\n\n');
+		buf.add('    state $className {\n');
+	
+		for (i in 0...regions.length) {
+			var reg = regions[i];
+			if (i > 0) buf.add("\n        --\n\n");
+	
+			buf.add('        state ${reg.name} {\n');
+			var resolvedType = Context.resolveType(reg.type, reg.pos);
+			var initExpr = regionInits.get(reg.name);
+			var hookNotes = showHooks ? collectHookDescriptions(reg.name, enterHooks, exitHooks, allFunctions) : new Map<String, Array<String>>();
+	
+			writeEnumStates(buf, resolvedType, initExpr, hookNotes, "            ");
+			buf.add("\n");
+	
+			var updateFn = allFunctions.get('update_${reg.name}');
+			if (updateFn != null && updateFn.expr != null) {
+				var seenEdges = new Map<String, Bool>();
+				extractTransitions(buf, updateFn.expr, reg.name, i, resolvedType, regions, allFunctions, seenEdges, showGuards, "            ", false);
+			}
+			buf.add("        }\n");
+		}
+		buf.add("    }\n");
+		return buf.toString();
+	}
+
+	private static function writeEnumStates(
+		buf:StringBuf,
+		type:Type,
+		initExpr:Null<Expr>,
+		hookNotes:Map<String, Array<String>>,
+		indent:String
+	):Void {
+		switch (Context.follow(type)) {
+			case TEnum(_.get() => enumType, _):
+				var initInfo = initExpr != null ? getConstructorInfo(initExpr) : null;
+				if (initInfo != null) {
+					buf.add('$indent[*] --> ${initInfo.name}\n');
+				}
+	
+				for (name => ctor in enumType.constructs) {
+					if (hookNotes.exists(name)) {
+						for (note in hookNotes.get(name)) {
+							buf.add('$indent$name : $note\n');
+						}
+					}
+					switch (ctor.type) {
+						case TFun(args, _):
+							for (argIdx in 0...args.length) {
+								switch (Context.follow(args[argIdx].t)) {
+									case TEnum(_, _):
+										var subInit = (initInfo != null && initInfo.name == name && initInfo.args.length > argIdx) ? initInfo.args[argIdx] : null;
+										buf.add('${indent}state $name {\n');
+										writeEnumStates(buf, args[argIdx].t, subInit, hookNotes, indent + "    ");
+										buf.add('$indent}\n');
+									default:
+								}
+							}
+						default:
+					}
+				}
+			default:
+		}
+	}
+	
+	private static function collectHookDescriptions(
+		regName:String,
+		enterHooks:Map<String, Array<HookInfo>>,
+		exitHooks:Map<String, Array<HookInfo>>,
+		allFunctions:Map<String, Function>
+	):Map<String, Array<String>> {
+		var map = new Map<String, Array<String>>();
+		var addNote = function(prefix:String, hooks:Array<HookInfo>) {
+			if (hooks == null) return;
+			for (h in hooks) {
+				var stateName = h.path[h.path.length - 1];
+				var actions = extractHookActions(allFunctions.get(h.fn));
+				var text = actions.length > 0 ? '$prefix / ${actions.join(", ")}' : '$prefix / ${h.fn}()';
+				if (!map.exists(stateName)) map.set(stateName, []);
+				map.get(stateName).push(text);
+			}
+		};
+		addNote("entry", enterHooks.get(regName));
+		addNote("exit", exitHooks.get(regName));
+		return map;
+	}
+	
+	private static function extractHookActions(fn:Null<Function>):Array<String> {
+		var list:Array<String> = [];
+		if (fn == null || fn.expr == null) return list;
+		function walk(e:Expr):Void {
+			switch (e.expr) {
+				case ECall({expr: EConst(CIdent("emit"))}, args) if (args.length > 0):
+					list.push(ExprTools.toString(args[0]));
+				default:
+					ExprTools.iter(e, walk);
+			}
+		}
+		walk(fn.expr);
+		return list;
+	}
+
+	private static function extractTransitions(
+		buf:StringBuf,
+		fnExpr:Expr,
+		regName:String,
+		regIdx:Int,
+		currentStateType:Null<Type>,
+		regions:Array<{name:String, type:ComplexType, pos:Position}>,
+		allFunctions:Map<String, Function>,
+		seenEdges:Map<String, Bool>,
+		showGuards:Bool,
+		indent:String,
+		isSubUpdate:Bool = false
+	):Void {
+		function findSwitch(e:Expr):Void {
+			switch (e.expr) {
+				case ESwitch(target, cases, _):
+					var subjects = switch (target.expr) {
+						case EArrayDecl(arr): arr;
+						default: [target];
+					};
+					var stateSubjIdx = isSubUpdate ? 0 : (subjects.length > regions.length ? regIdx : 0);
+					var eventSubjIdx = subjects.length - 1;
+	
+					for (c in cases) {
+						if (c.expr == null) continue;
+						var delegatedFn = findDelegatedCall(c.expr, allFunctions);
+						if (delegatedFn != null && delegatedFn.expr != null) {
+							// Typ des Substates aus dem 1. Parameter der delegierten Funktion auflösen
+							var subType:Null<Type> = null;
+							if (delegatedFn.args.length > 0 && delegatedFn.args[0].type != null) {
+								subType = Context.resolveType(delegatedFn.args[0].type, e.pos);
+							}
+							extractTransitions(buf, delegatedFn.expr, regName, regIdx, subType, regions, allFunctions, seenEdges, showGuards, indent, true);
+							continue;
+						}
+	
+						for (v in c.values) {
+							var pats = switch (v.expr) {
+								case EArrayDecl(arr): arr;
+								default: [v];
+							};
+							if (pats.length <= eventSubjIdx) continue;
+	
+							var fromStates = extractStateNamesFromPattern(pats[stateSubjIdx], currentStateType);
+							var eventLabel = cleanExprLabel(pats[eventSubjIdx]);
+							if (fromStates.length == 0 || eventLabel == "_") continue;
+	
+							var guards:Array<String> = [];
+							if (showGuards) {
+								if (!isSubUpdate && subjects.length > regions.length) {
+									for (rIdx in 0...regions.length) {
+										if (rIdx != regIdx && rIdx < pats.length) {
+											var otherPat = cleanExprLabel(pats[rIdx]);
+											if (otherPat != "_") guards.push('${regions[rIdx].name} == $otherPat');
+										}
+									}
+								}
+								if (c.guard != null) guards.push(cleanExprLabel(c.guard));
+							}
+	
+							var targets = extractTargetStates(c.expr, regName);
+							for (from in fromStates) {
+								for (t in targets) {
+									if (t.state == from) continue; // Self-Loops ausblenden
+									var allGuards = guards.copy();
+									if (showGuards && t.cond != null) allGuards.push(t.cond);
+									var guardStr = allGuards.length > 0 ? ' [${allGuards.join(" && ")}]' : "";
+									var edgeLine = '$indent$from --> ${t.state} : $eventLabel$guardStr\n';
+									
+									// Deduplizierung über seenEdges
+									if (!seenEdges.exists(edgeLine)) {
+										seenEdges.set(edgeLine, true);
+										buf.add(edgeLine);
+									}
+								}
+							}
+						}
+					}
+				default:
+					ExprTools.iter(e, findSwitch);
+			}
+		}
+		findSwitch(fnExpr);
+	}
+
+	private static function findDelegatedCall(e:Expr, allFunctions:Map<String, Function>):Null<Function> {
+		var found:Null<Function> = null;
+		function walk(sub:Expr):Void {
+			if (found != null) return;
+			switch (sub.expr) {
+				case ECall({expr: EConst(CIdent(fnName))}, _) if (allFunctions.exists(fnName)):
+					found = allFunctions.get(fnName);
+				default:
+					ExprTools.iter(sub, walk);
+			}
+		}
+		walk(e);
+		return found;
+	}
+	
+	private static function extractStateNamesFromPattern(pat:Expr, ?enumType:Type):Array<String> {
+		return switch (pat.expr) {
+			case EBinop(OpOr, e1, e2):
+				extractStateNamesFromPattern(e1, enumType).concat(extractStateNamesFromPattern(e2, enumType));
+			case ECall({expr: EConst(CIdent(name))}, args):
+				var subNames:Array<String> = [];
+				var ctor = switch (enumType != null ? Context.follow(enumType) : null) {
+					case TEnum(_.get() => et, _): et.constructs.get(name);
+					default: null;
+				};
+				var argTypes = switch (ctor != null ? ctor.type : null) {
+					case TFun(targs, _): [for (ta in targs) ta.t];
+					default: [];
+				};
+				for (i in 0...args.length) {
+					var argT = i < argTypes.length ? argTypes[i] : null;
+					switch (args[i].expr) {
+						// Variable wie "sub" -> alle Konstruktoren des Sub-Enums nehmen!
+						case EConst(CIdent(v)) if (v != "_" && v.charAt(0) == v.charAt(0).toLowerCase() && argT != null):
+							switch (Context.follow(argT)) {
+								case TEnum(_.get() => subEt, _):
+									for (subName => _ in subEt.constructs) subNames.push(subName);
+								default:
+							}
+						default:
+							subNames = subNames.concat(extractStateNamesFromPattern(args[i], argT));
+					}
+				}
+				subNames.length > 0 ? subNames : [name];
+			case EConst(CIdent(name)) if (name != "_" && name.charAt(0) == name.charAt(0).toUpperCase()):
+				[name];
+			default:
+				[];
+		};
+	}
+	private static function extractTargetStates(e:Expr, regName:String):Array<{state:String, cond:Null<String>}> {
+		function collectFromExpr(targetExpr:Expr, baseCond:Null<String>, vars:Map<String, Expr>):Array<{state:String, cond:Null<String>}> {
+			var results:Array<{state:String, cond:Null<String>}> = [];
+	
+			function walk(sub:Expr, cond:Null<String>, currentVars:Map<String, Expr>):Void {
+				switch (sub.expr) {
+					case EBlock(exprs) if (exprs.length > 0):
+						var localVars = [for (k => v in currentVars) k => v];
+						function substVars(expr:Expr):Expr {
+							return switch (expr.expr) {
+								case EConst(CIdent(id)) if (localVars.exists(id)): localVars.get(id);
+								default: ExprTools.map(expr, substVars);
+							};
+						}
+						for (i in 0...exprs.length) {
+							var stmt = exprs[i];
+							switch (stmt.expr) {
+								case EVars(vlist):
+									for (v in vlist) {
+										if (v.expr != null) localVars.set(v.name, substVars(v.expr));
+									}
+								default:
+									walk(substVars(stmt), cond, localVars);
+							}
+						}
+	
+					case EReturn(retExpr) if (retExpr != null):
+						walk(retExpr, cond, currentVars);
+	
+					case EIf(econd, eif, eelse) | ETernary(econd, eif, eelse):
+						var ifIsNoOp = isNoOpExpr(eif, regName);
+						var elseIsNoOp = eelse != null && isNoOpExpr(eelse, regName);
+						if (ifIsNoOp && eelse != null) {
+							walk(eelse, cond, currentVars);
+						} else if (elseIsNoOp) {
+							walk(eif, cond, currentVars);
+						} else {
+							var cStr = cleanExprLabel(econd);
+							walk(eif, cond == null ? cStr : '$cond && $cStr', currentVars);
+							if (eelse != null) {
+								walk(eelse, cond == null ? '!($cStr)' : '$cond && !($cStr)', currentVars);
+							}
+						}
+	
+					case ECall({expr: EConst(CIdent(name))}, args) if (name.charAt(0) == name.charAt(0).toUpperCase()):
+						var foundSubTargets = false;
+						for (a in args) {
+							// Hier wird jetzt collectFromExpr mit currentVars statt extractTargetStates aufgerufen!
+							var subTargets = collectFromExpr(a, null, currentVars);
+							if (subTargets.length > 0) {
+								foundSubTargets = true;
+								for (st in subTargets) {
+									var combinedCond = if (cond != null && st.cond != null) '$cond && ${st.cond}'
+										else if (cond != null) cond
+										else st.cond;
+									results.push({state: st.state, cond: combinedCond});
+								}
+							}
+						}
+						if (!foundSubTargets) {
+							results.push({state: name, cond: cond});
+						}
+	
+					case EConst(CIdent(name)) if (name != "_" && name.charAt(0) == name.charAt(0).toUpperCase()):
+						results.push({state: name, cond: cond});
+						
+					default:
+				}
+			}
+	
+			walk(targetExpr, baseCond, vars);
+			return results;
+		}
+	
+		return collectFromExpr(e, null, new Map<String, Expr>());
+	}
+
+	private static function isNoOpExpr(e:Expr, regName:String):Bool {
+		return switch (e.expr) {
+			case EConst(CIdent(id)) if (id == regName): true;
+			case EField({expr: EConst(CIdent("this"))}, field) if (field == regName): true;
+			case EBlock([single]): isNoOpExpr(single, regName);
+			case EReturn(ret) if (ret != null): isNoOpExpr(ret, regName);
+			default: false;
+		};
+	}
+
+	private static function cleanExprLabel(e:Expr):String {
+		return StringTools.replace(ExprTools.toString(e), "\n", " ");
+	}
 }
 #end

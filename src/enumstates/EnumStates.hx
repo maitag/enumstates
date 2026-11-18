@@ -8,4 +8,5 @@ interface EnumStates<TEvent, TEffect> {
     public function restoreSnapshot(snapshot:Dynamic, triggerEntryHooks:Bool = false):Void;
     public function toJson(pretty:Bool = false):String;
     public function fromJson(json:String, triggerEntryHooks:Bool = false):Void;
+    public function toMermaid(showHooks: Bool = true, showGuards: Bool = true): String;
 }
