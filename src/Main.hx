@@ -6,6 +6,8 @@ import enumstates.EnumStates;
 import enumstates.Test;
 import enumstates.Benchs;
 
+import samples.*;
+
 // ---- main states ------
 
 enum ActionState {
@@ -155,6 +157,7 @@ class Main extends Application {
 
 		// print uml diagram
 		trace("\n"+p.toMermaid());
+
 		// trace(p.toMermaid(false, false)); // without 
 
 
@@ -163,5 +166,7 @@ class Main extends Application {
 
 		// bench
 		// Benchs.run(10000, 600);
+
+		Car.test();
 	}
 }

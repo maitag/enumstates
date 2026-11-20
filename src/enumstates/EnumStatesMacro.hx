@@ -772,7 +772,7 @@ class EnumStatesMacro {
 			var updateFn = allFunctions.get('update_${reg.name}');
 			if (updateFn != null && updateFn.expr != null) {
 				var seenEdges = new Map<String, Bool>();
-				extractTransitions(buf, updateFn.expr, reg.name, i, resolvedType, regions, allFunctions, seenEdges, showGuards, "            ", false);
+				extractTransitions(buf, updateFn.expr, reg.name, i, reg.name, resolvedType, regions, allFunctions, seenEdges, showGuards, "            ", false);
 			}
 			buf.add("        }\n");
 		}
@@ -795,11 +795,42 @@ class EnumStatesMacro {
 				}
 	
 				for (name => ctor in enumType.constructs) {
-					if (hookNotes.exists(name)) {
+					var hasHooks = hookNotes.exists(name);
+					if (hasHooks) {
 						for (note in hookNotes.get(name)) {
 							buf.add('$indent$name : $note\n');
 						}
 					}
+
+					// Prüfen, ob der Konstruktor selbst wieder ein Composite-State (Sub-Enum) ist
+					var hasSubEnum = false;
+					switch (ctor.type) {
+						case TFun(args, _):
+							for (argIdx in 0...args.length) {
+								switch (Context.follow(args[argIdx].t)) {
+									case TEnum(_, _):
+										hasSubEnum = true;
+										var subInit = (initInfo != null && initInfo.name == name && initInfo.args.length > argIdx) ? initInfo.args[argIdx] : null;
+										buf.add('${indent}state $name {\n');
+										writeEnumStates(buf, args[argIdx].t, subInit, hookNotes, indent + "    ");
+										buf.add('$indent}\n');
+									default:
+								}
+							}
+						default:
+					}
+
+					// Atomarer Zustand ohne Hooks -> trotzdem explizit im Block aufführen
+					if (!hasHooks && !hasSubEnum) {
+						buf.add('$indent$name\n');
+					}
+
+					/*if (hookNotes.exists(name)) {
+						for (note in hookNotes.get(name)) {
+							buf.add('$indent$name : $note\n');
+						}
+					}
+
 					switch (ctor.type) {
 						case TFun(args, _):
 							for (argIdx in 0...args.length) {
@@ -813,7 +844,7 @@ class EnumStatesMacro {
 								}
 							}
 						default:
-					}
+					}*/
 				}
 			default:
 		}
@@ -856,11 +887,25 @@ class EnumStatesMacro {
 		return list;
 	}
 
+	private static function locateStateIndex(tupleItems:Array<Expr>, expectedVarName:String, limit:Int):Int {
+		for (idx in 0...limit) {
+			switch (tupleItems[idx].expr) {
+				case EConst(CIdent(id)) if (id == expectedVarName):
+					return idx;
+				case EField(_, member) if (member == expectedVarName):
+					return idx;
+				default:
+			}
+		}
+		return 0;
+	}
+	
 	private static function extractTransitions(
 		buf:StringBuf,
 		fnExpr:Expr,
 		regName:String,
 		regIdx:Int,
+		currentVarName:String,
 		currentStateType:Null<Type>,
 		regions:Array<{name:String, type:ComplexType, pos:Position}>,
 		allFunctions:Map<String, Function>,
@@ -872,6 +917,94 @@ class EnumStatesMacro {
 		function findSwitch(e:Expr):Void {
 			switch (e.expr) {
 				case ESwitch(target, cases, _):
+					var tupleExprs = switch (target.expr) {
+						case EArrayDecl(items): items;
+						default: [target];
+					}
+
+					var evtIdx = tupleExprs.length - 1;
+					var ownIdx = locateStateIndex(tupleExprs, currentVarName, evtIdx);
+
+					for (branch in cases) {
+						if (branch.expr == null) continue;
+
+						// 1. Prüfen, ob an eine Sub-Funktion delegiert wird
+						var subHandler = findDelegatedCall(branch.expr, allFunctions);
+						if (subHandler != null && subHandler.expr != null) {
+							var nestedType:Null<Type> = null;
+							var nestedParamName = "sub";
+							if (subHandler.args.length > 0) {
+								nestedParamName = subHandler.args[0].name;
+								if (subHandler.args[0].type != null) {
+									nestedType = Context.resolveType(subHandler.args[0].type, e.pos);
+								}
+							}
+							// Rekursiver Aufruf mit nestedType und nestedParamName
+							extractTransitions(buf, subHandler.expr, regName, regIdx, nestedParamName, nestedType, regions, allFunctions, seenEdges, showGuards, indent, true);
+							continue;
+						}
+
+						// 2. Muster im aktuellen Case auswerten
+						for (patternItem in branch.values) {
+							var patList = switch (patternItem.expr) {
+								case EArrayDecl(items): items;
+								default: [patternItem];
+							};
+							if (patList.length <= evtIdx) continue;
+
+							var originStates = extractStateNamesFromPattern(patList[ownIdx], currentStateType);
+							var evtText = cleanExprLabel(patList[evtIdx]);
+
+							// Alle anderen Tupel-Positionen als Guards einsammeln (funktioniert auch in Sub-Updates!)
+							var rawConditions:Array<String> = [];
+							for (posIdx in 0...evtIdx) {
+								if (posIdx == ownIdx || posIdx >= patList.length) continue;
+								var condPat = cleanExprLabel(patList[posIdx]);
+								if (condPat != "_") {
+									var condVar = cleanExprLabel(tupleExprs[posIdx]);
+									rawConditions.push('$condVar == $condPat');
+								}
+							}
+
+							// Explizite if-Bedingung ergänzen
+							if (branch.guard != null) {
+								rawConditions.push(cleanExprLabel(branch.guard));
+							}
+
+							// Wildcard-Event "_" nur ignorieren, wenn auch keine Guards vorhanden sind
+							if (originStates.length == 0 || (evtText == "_" && rawConditions.length == 0)) {
+								continue;
+							}
+
+							// Zielzustände auslesen und Diagramm-Zeilen bauen
+							var destList = extractTargetStates(branch.expr, regName);
+							for (origin in originStates) {
+								for (dest in destList) {
+									if (dest.state == origin) continue;
+
+									var mergedConds = rawConditions.copy();
+									if (dest.cond != null) mergedConds.push(dest.cond);
+
+									var guardBlock = (showGuards && mergedConds.length > 0)
+										? ' [${mergedConds.join(" && ")}]'
+										: "";
+
+									var edgeSuffix = if (evtText == "_") {
+										guardBlock != "" ? ' :$guardBlock' : "";
+									} else {
+										' : $evtText$guardBlock';
+									};
+
+									var line = '$indent$origin --> ${dest.state}$edgeSuffix\n';
+									if (!seenEdges.exists(line)) {
+										seenEdges.set(line, true);
+										buf.add(line);
+									}
+								}
+							}
+						}
+					}
+/*
 					var subjects = switch (target.expr) {
 						case EArrayDecl(arr): arr;
 						default: [target];
@@ -933,7 +1066,7 @@ class EnumStatesMacro {
 								}
 							}
 						}
-					}
+					}*/
 				default:
 					ExprTools.iter(e, findSwitch);
 			}
