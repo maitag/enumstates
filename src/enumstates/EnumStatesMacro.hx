@@ -765,7 +765,7 @@ class EnumStatesMacro {
 			var resolvedType = Context.resolveType(reg.type, reg.pos);
 			var initExpr = regionInits.get(reg.name);
 			var hookNotes = showHooks ? collectHookDescriptions(reg.name, enterHooks, exitHooks, allFunctions) : new Map<String, Array<String>>();
-	
+			
 			writeEnumStates(buf, resolvedType, initExpr, hookNotes, "            ");
 			buf.add("\n");
 	
@@ -796,11 +796,6 @@ class EnumStatesMacro {
 	
 				for (name => ctor in enumType.constructs) {
 					var hasHooks = hookNotes.exists(name);
-					if (hasHooks) {
-						for (note in hookNotes.get(name)) {
-							buf.add('$indent$name : $note\n');
-						}
-					}
 
 					// Prüfen, ob der Konstruktor selbst wieder ein Composite-State (Sub-Enum) ist
 					var hasSubEnum = false;
@@ -820,31 +815,21 @@ class EnumStatesMacro {
 						default:
 					}
 
+					if (hasHooks) {
+						if (hasSubEnum) {
+							// buf.add('$indent$name : ${hookNotes.get(name).join(", ")}\n');
+							buf.add('${indent}note left of $name : ${hookNotes.get(name).join(", ")}\n');
+						}
+						else {
+							for (note in hookNotes.get(name)) buf.add('$indent$name : $note\n');
+						}
+					}
+
 					// Atomarer Zustand ohne Hooks -> trotzdem explizit im Block aufführen
 					if (!hasHooks && !hasSubEnum) {
 						buf.add('$indent$name\n');
 					}
 
-					/*if (hookNotes.exists(name)) {
-						for (note in hookNotes.get(name)) {
-							buf.add('$indent$name : $note\n');
-						}
-					}
-
-					switch (ctor.type) {
-						case TFun(args, _):
-							for (argIdx in 0...args.length) {
-								switch (Context.follow(args[argIdx].t)) {
-									case TEnum(_, _):
-										var subInit = (initInfo != null && initInfo.name == name && initInfo.args.length > argIdx) ? initInfo.args[argIdx] : null;
-										buf.add('${indent}state $name {\n');
-										writeEnumStates(buf, args[argIdx].t, subInit, hookNotes, indent + "    ");
-										buf.add('$indent}\n');
-									default:
-								}
-							}
-						default:
-					}*/
 				}
 			default:
 		}
@@ -1004,69 +989,7 @@ class EnumStatesMacro {
 							}
 						}
 					}
-/*
-					var subjects = switch (target.expr) {
-						case EArrayDecl(arr): arr;
-						default: [target];
-					};
-					var stateSubjIdx = isSubUpdate ? 0 : (subjects.length > regions.length ? regIdx : 0);
-					var eventSubjIdx = subjects.length - 1;
-	
-					for (c in cases) {
-						if (c.expr == null) continue;
-						var delegatedFn = findDelegatedCall(c.expr, allFunctions);
-						if (delegatedFn != null && delegatedFn.expr != null) {
-							// Typ des Substates aus dem 1. Parameter der delegierten Funktion auflösen
-							var subType:Null<Type> = null;
-							if (delegatedFn.args.length > 0 && delegatedFn.args[0].type != null) {
-								subType = Context.resolveType(delegatedFn.args[0].type, e.pos);
-							}
-							extractTransitions(buf, delegatedFn.expr, regName, regIdx, subType, regions, allFunctions, seenEdges, showGuards, indent, true);
-							continue;
-						}
-	
-						for (v in c.values) {
-							var pats = switch (v.expr) {
-								case EArrayDecl(arr): arr;
-								default: [v];
-							};
-							if (pats.length <= eventSubjIdx) continue;
-	
-							var fromStates = extractStateNamesFromPattern(pats[stateSubjIdx], currentStateType);
-							var eventLabel = cleanExprLabel(pats[eventSubjIdx]);
-							if (fromStates.length == 0 || eventLabel == "_") continue;
-	
-							var guards:Array<String> = [];
-							if (showGuards) {
-								if (!isSubUpdate && subjects.length > regions.length) {
-									for (rIdx in 0...regions.length) {
-										if (rIdx != regIdx && rIdx < pats.length) {
-											var otherPat = cleanExprLabel(pats[rIdx]);
-											if (otherPat != "_") guards.push('${regions[rIdx].name} == $otherPat');
-										}
-									}
-								}
-								if (c.guard != null) guards.push(cleanExprLabel(c.guard));
-							}
-	
-							var targets = extractTargetStates(c.expr, regName);
-							for (from in fromStates) {
-								for (t in targets) {
-									if (t.state == from) continue; // Self-Loops ausblenden
-									var allGuards = guards.copy();
-									if (showGuards && t.cond != null) allGuards.push(t.cond);
-									var guardStr = allGuards.length > 0 ? ' [${allGuards.join(" && ")}]' : "";
-									var edgeLine = '$indent$from --> ${t.state} : $eventLabel$guardStr\n';
-									
-									// Deduplizierung über seenEdges
-									if (!seenEdges.exists(edgeLine)) {
-										seenEdges.set(edgeLine, true);
-										buf.add(edgeLine);
-									}
-								}
-							}
-						}
-					}*/
+
 				default:
 					ExprTools.iter(e, findSwitch);
 			}

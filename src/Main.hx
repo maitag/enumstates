@@ -162,11 +162,13 @@ class Main extends Application {
 
 
 		// test
-		// Test.run();
+		Test.run();
 
 		// bench
-		// Benchs.run(10000, 600);
+		Benchs.run(10000, 600);
 
-		Car.test();
+		// Car.test();
+		// CarSubstate.test();
+		// CarCranking.test();
 	}
 }
