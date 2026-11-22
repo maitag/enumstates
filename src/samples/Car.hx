@@ -2,43 +2,9 @@ package samples;
 
 import enumstates.EnumStates;
 
-// ---- Regions & Sub-States ----
-enum IgnitionState {
-    KeyOff;
-    KeyOn(engine:EngineState); // Hierarchischer Substate: Motor hängt an der Zündung
-}
-
-enum EngineState {
-    Stopped;
-    Running;
-}
-
-enum LightState {
-    LightsOff;
-    LightsOn;
-}
-
-enum ClutchState {
-    Released;
-    Pressed;
-}
-
-// ---- Events & Effects ----
-enum CarEvent {
-    TurnKeyOn;
-    TurnKeyOff;
-    PressClutch;
-    ReleaseClutch;
-    PressStartButton;
-    PressStopButton;
-    ToggleLights;
-}
-
-enum CarEffect {
-    PlaySound(id:String);
-    SetHeadlights(active:Bool);
-    SetDashboardPower(active:Bool);
-}
+import samples.CarStates.IgnitionState;
+import samples.CarStates.LightState;
+import samples.CarStates.ClutchState;
 
 // ---- State Machine ----
 class Car implements EnumStates<CarEvent, CarEffect> {

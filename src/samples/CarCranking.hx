@@ -2,46 +2,10 @@ package samples;
 
 import enumstates.EnumStates;
 
-// ---- Regions & Sub-States ----
-enum IgnitionState {
-    KeyOff;
-    KeyOn(engine:EngineState);
-}
-
-enum EngineState {
-    Stopped;
-    Cranking(remaining:Float); // Anlasser läuft für X Sekunden
-    Running;
-}
-
-enum LightState {
-    LightsOff;
-    LightsOn;
-}
-
-enum ClutchState {
-    Released;
-    Pressed;
-}
-
-// ---- Events & Effects ----
-enum CarEvent {
-    TurnKeyOn;
-    TurnKeyOff;
-    PressClutch;
-    ReleaseClutch;
-    PressStartButton;
-    PressStopButton;
-    ToggleLights;
-    TimerStep(dt:Float); // Aktiviert automatisch car.timerStep(dt) im Makro
-}
-
-enum CarEffect {
-    PlaySound(id:String);
-    StopSound(id:String);
-    SetHeadlights(active:Bool);
-    SetDashboardPower(active:Bool);
-}
+import samples.CarStates.IgnitionState;
+import samples.CarStates.EngineState;
+import samples.CarStates.LightState;
+import samples.CarStates.ClutchState;
 
 
 // ---- State Machine ----

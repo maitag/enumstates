@@ -157,15 +157,14 @@ class Main extends Application {
 
 		// print uml diagram
 		trace("\n"+p.toMermaid());
-
-		// trace(p.toMermaid(false, false)); // without 
+		// trace(p.toMermaid(false, false));
 
 
 		// test
-		Test.run();
+		// Test.run();
 
 		// bench
-		Benchs.run(10000, 600);
+		// Benchs.run(10000, 600);
 
 		// Car.test();
 		// CarSubstate.test();
