@@ -2,20 +2,20 @@ package samples;
 
 import enumstates.EnumStates;
 
-import samples.CarStates.IgnitionState;
-import samples.CarStates.EngineState;
+import samples.CarStates.IgnitionStateCranking;
+import samples.CarStates.EngineStateCranking;
 import samples.CarStates.LightState;
 import samples.CarStates.ClutchState;
 
 
 // ---- State Machine ----
 class CarCranking implements EnumStates<CarEvent, CarEffect> {
-    @:region public var ignition:IgnitionState = KeyOff;
+    @:region public var ignition:IgnitionStateCranking = KeyOff;
     @:region public var lights:LightState = LightsOff;
     @:region public var clutch:ClutchState = Released;
 
     // 1. Parent-Region: Zündung
-    inline function update_ignition(event:CarEvent):IgnitionState {
+    inline function update_ignition(event:CarEvent):IgnitionStateCranking {
         return switch [ignition, event] {
             case [KeyOff, TurnKeyOn]:
                 KeyOn(Stopped);
@@ -35,7 +35,7 @@ class CarCranking implements EnumStates<CarEvent, CarEffect> {
     }
 
     // Delegierte Sub-State-Logik für den Motor inkl. Anlasser-Timer
-    inline function update_engine_sub(sub:EngineState, event:CarEvent):EngineState {
+    inline function update_engine_sub(sub:EngineStateCranking, event:CarEvent):EngineStateCranking {
         return switch [sub, event] {
             case [Stopped, PressStartButton] if (clutch == Pressed):
                 Cranking(0.8);

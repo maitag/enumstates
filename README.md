@@ -58,7 +58,6 @@ stateDiagram-v2
                 Stopped
                 Running : entry / PlaySound("engine_start")
                 Running : exit / PlaySound("engine_stop")
-                Cranking
             }
             note left of KeyOn : entry / SetDashboardPower(true), exit / SetDashboardPower(false)
             KeyOff
@@ -108,7 +107,6 @@ stateDiagram-v2
                 Stopped
                 Running : entry / PlaySound("engine_start")
                 Running : exit / PlaySound("engine_stop")
-                Cranking
             }
             note left of KeyOn : entry / SetDashboardPower(true), exit / SetDashboardPower(false)
             KeyOff

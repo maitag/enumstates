@@ -10,7 +10,6 @@ enum IgnitionState {
 enum EngineState {
     Stopped;
     Running;
-    Cranking(remaining:Float); // Anlasser läuft für X Sekunden
 }
 
 enum LightState {
@@ -23,3 +22,15 @@ enum ClutchState {
     Pressed;
 }
 
+// ---- extra for car cranking sample ----
+
+enum IgnitionStateCranking {
+    KeyOff;
+    KeyOn(engine:EngineStateCranking); // Hierarchischer Substate: Motor hängt an der Zündung
+}
+
+enum EngineStateCranking {
+    Stopped;
+    Running;
+    Cranking(remaining:Float); // Anlasser läuft für X Sekunden
+}
