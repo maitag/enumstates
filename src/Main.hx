@@ -171,6 +171,6 @@ class Main extends Application {
 
 		// Car.test();
 		// CarSubstate.test();
-		// CarCranking.test();
+		CarCranking.test();
 	}
 }

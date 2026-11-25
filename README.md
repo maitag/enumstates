@@ -14,20 +14,33 @@ stateDiagram-v2
             [*] --> Grounded
             state Grounded {
                 [*] --> Idle
-                Running : entry / PlayAnim("run"), SetDustTrail(true)
-                Running : exit / SetDustTrail(false)
-                Idle : entry / PlayAnim("idle")
+                state Running {
+                    state "onEnter_movement_Grounded_Running:<br>PlayAnim(run), SetDustTrail(true)" as OnEnterHookRunning
+                }
+                state Running {
+                    state "onExit_movement_Grounded_Running:<br>SetDustTrail(false)" as OnExitHookRunning
+                }
+                state Idle {
+                    state "onEnter_movement_Grounded_Idle:<br>PlayAnim(idle)" as OnEnterHookIdle
+                }
+                state "onEnter_movement_Grounded" as OnEnterHookGrounded
+                state "onExit_movement_Grounded" as OnExitHookGrounded
             }
-            note left of Grounded : entry / onEnter_movement_Grounded(), exit / onExit_movement_Grounded()
             state Airborne {
-                Rising : entry / PlayAnim("jump_up")
-                Falling : entry / PlayAnim("fall_down")
+                state Rising {
+                    state "onEnter_movement_Airborne_Rising:<br>PlayAnim(jump_up)" as OnEnterHookRising
+                }
+                state Falling {
+                    state "onEnter_movement_Airborne_Falling:<br>PlayAnim(fall_down)" as OnEnterHookFalling
+                }
             }
 
-            Grounded --> Rising : Jump [action == Ready]
+            Running --> Rising : Jump [action == Ready]
+            Idle --> Rising : Jump [action == Ready]
             Idle --> Running : StartRun(speed)
             Running --> Idle : StopRun
-            Airborne --> Idle : Land
+            Rising --> Idle : Land
+            Falling --> Idle : Land
             Rising --> Falling : TimerStep(dt) [action.match(Dashing(_)) ? 0.0 : vy - 9.81 * dt <= 0]
             Falling --> Rising : TimerStep(dt) [!(action.match(Dashing(_)) ? 0.0 : vy - 9.81 * dt <= 0)]
         }
@@ -43,6 +56,20 @@ stateDiagram-v2
             Dashing --> Ready : TimerStep(dt) [t - dt <= 0]
         }
     }
+classDef green fill:#d4edda,stroke:#28a745,color:#155724
+classDef red fill:#f8d7da,stroke:#dc3545,color:#721c24,font-weight:bold
+classDef any fill:#aaaaaa,stroke-width:0px,color:#721c24, font-size:6px, rx:10px, ry:10px
+class ___ any
+class OnEnterHookRunning green
+class OnEnterHookRising green
+class OnEnterHookIdle green
+class OnEnterHookGrounded green
+class OnEnterHookFalling green
+class OnExitHookRunning red
+class OnExitHookRising red
+class OnExitHookIdle red
+class OnExitHookGrounded red
+class OnExitHookFalling red
 ```
 
 
@@ -56,14 +83,20 @@ stateDiagram-v2
             [*] --> KeyOff
             state KeyOn {
                 Stopped
-                Running : entry / PlaySound("engine_start")
-                Running : exit / PlaySound("engine_stop")
+                state Running {
+                    state "onEnter_ignition_KeyOn_Running:<br>PlaySound(engine_start)" as OnEnterHookRunning
+                }
+                state Running {
+                    state "onExit_ignition_KeyOn_Running:<br>PlaySound(engine_stop)" as OnExitHookRunning
+                }
+                state "onEnter_ignition_KeyOn:<br>SetDashboardPower(true)" as OnEnterHookKeyOn
+                state "onExit_ignition_KeyOn:<br>SetDashboardPower(false)" as OnExitHookKeyOn
             }
-            note left of KeyOn : entry / SetDashboardPower(true), exit / SetDashboardPower(false)
             KeyOff
 
             KeyOff --> Stopped : TurnKeyOn
-            KeyOn --> KeyOff : TurnKeyOff
+            Stopped --> KeyOff : TurnKeyOff
+            Running --> KeyOff : TurnKeyOff
             Stopped --> Running : PressStartButton [clutch == Pressed]
             Running --> Stopped : PressStopButton
         }
@@ -72,8 +105,12 @@ stateDiagram-v2
 
         state lights {
             [*] --> LightsOff
-            LightsOn : entry / SetHeadlights(true)
-            LightsOn : exit / SetHeadlights(false)
+            state LightsOn {
+                state "onEnter_lights_LightsOn:<br>SetHeadlights(true)" as OnEnterHookLightsOn
+            }
+            state LightsOn {
+                state "onExit_lights_LightsOn:<br>SetHeadlights(false)" as OnExitHookLightsOn
+            }
             LightsOff
 
             LightsOff --> LightsOn : ToggleLights
@@ -92,6 +129,16 @@ stateDiagram-v2
             Pressed --> Released : ReleaseClutch
         }
     }
+classDef green fill:#d4edda,stroke:#28a745,color:#155724
+classDef red fill:#f8d7da,stroke:#dc3545,color:#721c24,font-weight:bold
+classDef any fill:#aaaaaa,stroke-width:0px,color:#721c24, font-size:6px, rx:10px, ry:10px
+class ___ any
+class OnEnterHookRunning green
+class OnEnterHookKeyOn green
+class OnExitHookRunning red
+class OnExitHookKeyOn red
+class OnEnterHookLightsOn green
+class OnExitHookLightsOn red
 ```
 
 
@@ -105,14 +152,20 @@ stateDiagram-v2
             [*] --> KeyOff
             state KeyOn {
                 Stopped
-                Running : entry / PlaySound("engine_start")
-                Running : exit / PlaySound("engine_stop")
+                state Running {
+                    state "onEnter_ignition_KeyOn_Running:<br>PlaySound(engine_start)" as OnEnterHookRunning
+                }
+                state Running {
+                    state "onExit_ignition_KeyOn_Running:<br>PlaySound(engine_stop)" as OnExitHookRunning
+                }
+                state "onEnter_ignition_KeyOn:<br>SetDashboardPower(true)" as OnEnterHookKeyOn
+                state "onExit_ignition_KeyOn:<br>SetDashboardPower(false)" as OnExitHookKeyOn
             }
-            note left of KeyOn : entry / SetDashboardPower(true), exit / SetDashboardPower(false)
             KeyOff
 
             KeyOff --> Stopped : TurnKeyOn
-            KeyOn --> KeyOff : TurnKeyOff
+            Stopped --> KeyOff : TurnKeyOff
+            Running --> KeyOff : TurnKeyOff
             Stopped --> Running : PressStartButton [clutch == Pressed]
             Running --> Stopped : PressStopButton
         }
@@ -121,8 +174,12 @@ stateDiagram-v2
 
         state lights {
             [*] --> LightsOff
-            LightsOn : entry / SetHeadlights(true)
-            LightsOn : exit / SetHeadlights(false)
+            state LightsOn {
+                state "onEnter_lights_LightsOn:<br>SetHeadlights(true)" as OnEnterHookLightsOn
+            }
+            state LightsOn {
+                state "onExit_lights_LightsOn:<br>SetHeadlights(false)" as OnExitHookLightsOn
+            }
             LightsOff
 
             LightsOff --> LightsOn : ToggleLights
@@ -141,6 +198,16 @@ stateDiagram-v2
             Pressed --> Released : ReleaseClutch
         }
     }
+classDef green fill:#d4edda,stroke:#28a745,color:#155724
+classDef red fill:#f8d7da,stroke:#dc3545,color:#721c24,font-weight:bold
+classDef any fill:#aaaaaa,stroke-width:0px,color:#721c24, font-size:6px, rx:10px, ry:10px
+class ___ any
+class OnEnterHookRunning green
+class OnEnterHookKeyOn green
+class OnExitHookRunning red
+class OnExitHookKeyOn red
+class OnEnterHookLightsOn green
+class OnExitHookLightsOn red
 ```
 
 car with cranking:
@@ -153,19 +220,30 @@ stateDiagram-v2
             [*] --> KeyOff
             state KeyOn {
                 Stopped
-                Running : entry / PlaySound("engine_idle_loop")
-                Running : exit / StopSound("engine_idle_loop")
-                Cranking : entry / PlaySound("starter_crank")
-                Cranking : exit / StopSound("starter_crank")
+                state Running {
+                    state "onEnter_ignition_KeyOn_Running:<br>PlaySound(engine_idle_loop)" as OnEnterHookRunning
+                }
+                state Running {
+                    state "onExit_ignition_KeyOn_Running:<br>StopSound(engine_idle_loop)" as OnExitHookRunning
+                }
+                state Cranking {
+                    state "onEnter_ignition_KeyOn_Cranking:<br>PlaySound(starter_crank)" as OnEnterHookCranking
+                }
+                state Cranking {
+                    state "onExit_ignition_KeyOn_Cranking:<br>StopSound(starter_crank)" as OnExitHookCranking
+                }
+                state "onEnter_ignition_KeyOn:<br>SetDashboardPower(true)" as OnEnterHookKeyOn
+                state "onExit_ignition_KeyOn:<br>SetDashboardPower(false)" as OnExitHookKeyOn
             }
-            note left of KeyOn : entry / SetDashboardPower(true), exit / SetDashboardPower(false)
             KeyOff
 
             KeyOff --> Stopped : TurnKeyOn
-            KeyOn --> KeyOff : TurnKeyOff
+            Stopped --> KeyOff : TurnKeyOff
+            Running --> KeyOff : TurnKeyOff
+            Cranking --> KeyOff : TurnKeyOff
             Stopped --> Cranking : PressStartButton [clutch == Pressed]
             Cranking --> Stopped : ReleaseClutch
-            Cranking --> Running : TimerStep(dt) [t - dt <= 0]
+            Cranking --> Running : Tick [t - dt <= 0]
             Running --> Stopped : PressStopButton
         }
 
@@ -173,8 +251,12 @@ stateDiagram-v2
 
         state lights {
             [*] --> LightsOff
-            LightsOn : entry / SetHeadlights(true)
-            LightsOn : exit / SetHeadlights(false)
+            state LightsOn {
+                state "onEnter_lights_LightsOn:<br>SetHeadlights(true)" as OnEnterHookLightsOn
+            }
+            state LightsOn {
+                state "onExit_lights_LightsOn:<br>SetHeadlights(false)" as OnExitHookLightsOn
+            }
             LightsOff
 
             LightsOff --> LightsOn : ToggleLights
@@ -193,4 +275,16 @@ stateDiagram-v2
             Pressed --> Released : ReleaseClutch
         }
     }
+classDef green fill:#d4edda,stroke:#28a745,color:#155724
+classDef red fill:#f8d7da,stroke:#dc3545,color:#721c24,font-weight:bold
+classDef any fill:#aaaaaa,stroke-width:0px,color:#721c24, font-size:6px, rx:10px, ry:10px
+class ___ any
+class OnEnterHookRunning green
+class OnEnterHookKeyOn green
+class OnEnterHookCranking green
+class OnExitHookRunning red
+class OnExitHookKeyOn red
+class OnExitHookCranking red
+class OnEnterHookLightsOn green
+class OnExitHookLightsOn red
 ```

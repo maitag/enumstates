@@ -12,6 +12,7 @@
 	
 	
 	<app main="Main" path="bin" file="main" />
+	<!-- <app main="CatTest" path="bin" file="catTest" /> -->
 
 	<!-- <haxedef name="peoteview_fps" /> -->
 	

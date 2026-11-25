@@ -784,6 +784,9 @@ class EnumStatesMacro {
 		// colors for enter/exit
 		buf.add('classDef green fill:#d4edda,stroke:#28a745,color:#155724\n');
 		buf.add('classDef red fill:#f8d7da,stroke:#dc3545,color:#721c24,font-weight:bold\n');
+		buf.add('classDef any fill:#aaaaaa,stroke-width:0px,color:#721c24, font-size:6px, rx:10px, ry:10px\n');
+		buf.add('class ___ any\n');
+
 		buf.add(collectColorClasses);
 		
 		return buf.toString();
@@ -973,7 +976,7 @@ class EnumStatesMacro {
 
 							var originStates = extractStateNamesFromPattern(patList[ownIdx], currentStateType);
 							var evtText = cleanExprLabel(patList[evtIdx]);
-
+							trace(originStates,evtText);
 							// Alle anderen Tupel-Positionen als Guards einsammeln (funktioniert auch in Sub-Updates!)
 							var rawConditions:Array<String> = [];
 							for (posIdx in 0...evtIdx) {
@@ -994,7 +997,7 @@ class EnumStatesMacro {
 							if (originStates.length == 0 || (evtText == "_" && rawConditions.length == 0)) {
 								continue;
 							}
-
+							
 							// Zielzustände auslesen und Diagramm-Zeilen bauen
 							var destList = extractTargetStates(branch.expr, regName);
 							for (origin in originStates) {
@@ -1064,7 +1067,9 @@ class EnumStatesMacro {
 					var argT = i < argTypes.length ? argTypes[i] : null;
 					switch (args[i].expr) {
 						// Variable wie "sub" -> alle Konstruktoren des Sub-Enums nehmen!
-						case EConst(CIdent(v)) if (v != "_" && v.charAt(0) == v.charAt(0).toLowerCase() && argT != null):
+						// case EConst(CIdent(v)) if (v != "_" && v.charAt(0) == v.charAt(0).toLowerCase() && argT != null):
+// TODO: check that all here new is correctly !!!!!!!!!!!!!!!!!!!!1
+						case EConst(CIdent(v)) if (v.charAt(0) == v.charAt(0).toLowerCase() && argT != null):
 							switch (Context.follow(argT)) {
 								case TEnum(_.get() => subEt, _):
 									for (subName => _ in subEt.constructs) subNames.push(subName);
@@ -1075,9 +1080,12 @@ class EnumStatesMacro {
 					}
 				}
 				subNames.length > 0 ? subNames : [name];
-			case EConst(CIdent(name)) if (name != "_" && name.charAt(0) == name.charAt(0).toUpperCase()):
-				[name];
-			default:
+				
+// TODO: check that all new here is correctly !!!!!!!!!!!!!!!!!!!!1
+				// case EConst(CIdent(name)) if (name != "_" && name.charAt(0) == name.charAt(0).toUpperCase()): [name];
+				case EConst(CIdent("_")): ["___"];
+				case EConst(CIdent(name)) if (name.charAt(0) == name.charAt(0).toUpperCase()): [name];
+				default:
 				[];
 		};
 	}
