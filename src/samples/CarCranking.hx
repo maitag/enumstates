@@ -15,7 +15,7 @@ class CarCranking implements EnumStates<CarEvent, CarEffect> {
     @:region public var clutch:ClutchState = Released;
 
     // 1. Parent-Region: Zündung
-    inline function update_ignition(event:CarEvent):IgnitionStateCranking {
+    function update_ignition(event:CarEvent):IgnitionStateCranking {
         return switch [ignition, event] {
             case [KeyOff, TurnKeyOn]:
                 KeyOn(Stopped);
@@ -35,7 +35,7 @@ class CarCranking implements EnumStates<CarEvent, CarEffect> {
     }
 
     // Delegierte Sub-State-Logik für den Motor inkl. Anlasser-Timer
-    inline function update_engine_sub(sub:EngineStateCranking, event:CarEvent):EngineStateCranking {
+    function update_engine_sub(sub:EngineStateCranking, event:CarEvent):EngineStateCranking {
         return switch [sub, event] {
             case [Stopped, PressStartButton] if (clutch == Pressed):
                 Cranking(0.8);
@@ -43,7 +43,8 @@ class CarCranking implements EnumStates<CarEvent, CarEffect> {
             case [Cranking(_), ReleaseClutch]:
                 Stopped;
     
-            case [Cranking(t), TimerStep(dt)]:
+            // case [Cranking(t), TimerStep(dt)]:
+            case [Cranking(t), Tick]:
                 var left = t - dt;
                 left <= 0 ? Running : Cranking(left);
     
@@ -57,7 +58,7 @@ class CarCranking implements EnumStates<CarEvent, CarEffect> {
 
     
     // 2. Region: Licht
-    inline function update_lights(event:CarEvent):LightState {
+    function update_lights(event:CarEvent):LightState {
         return switch [lights, event] {
             case [LightsOff, ToggleLights]: LightsOn;
             case [LightsOn, ToggleLights]: LightsOff;
@@ -67,7 +68,7 @@ class CarCranking implements EnumStates<CarEvent, CarEffect> {
     }
 
     // 3. Region: Kupplung
-    inline function update_clutch(event:CarEvent):ClutchState {
+    function update_clutch(event:CarEvent):ClutchState {
         return switch [clutch, event] {
             case [Released, PressClutch]: Pressed;
             case [Pressed, ReleaseClutch]: Released;

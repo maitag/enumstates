@@ -8,5 +8,6 @@ enum CarEvent {
     PressStartButton;
     PressStopButton;
     ToggleLights;
-    TimerStep(dt:Float); // Aktiviert automatisch car.timerStep(dt) im Makro
+    //TimerStep(dt:Float); // Aktiviert automatisch car.timerStep(dt) im Makro
+    Tick;
 }

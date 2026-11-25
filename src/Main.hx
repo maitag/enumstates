@@ -166,7 +166,10 @@ class Main extends Application {
 		// bench
 		// Benchs.run(10000, 600);
 
-		Car.test();
+		// var car = new CarCranking(eff -> trace('[EFFECT] $eff'));
+		// trace(car.getGeneratedCode());
+
+		// Car.test();
 		// CarSubstate.test();
 		// CarCranking.test();
 	}

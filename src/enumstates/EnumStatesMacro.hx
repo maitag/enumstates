@@ -8,7 +8,7 @@ import haxe.macro.Type;
 import haxe.macro.TypeTools;
 
 private typedef HookInfo = {
-	var path:Array<String>; // z.B. ["Grounded"] or ["Grounded", "Running"]
+	var path:Array<String>; // e.g. ["Grounded"] or ["Grounded", "Running"]
 	var fn:String;
 	var pos:Position;
 }
@@ -87,6 +87,8 @@ class EnumStatesMacro {
 							field.access = [];
 						if (field.access.indexOf(AInline) == -1)
 							field.access.push(AInline);
+						if (field.access.indexOf(AFinal) == -1)
+							field.access.push(AFinal);
 					}
 
 					// mermaid:
@@ -113,7 +115,7 @@ class EnumStatesMacro {
 								pos: field.pos
 							});
 						} else {
-							Context.error('Mismatched hook-format "${field.name}". expects: onEnter_<region>_<Zustand>[_<SubZustand>].', field.pos);
+							Context.error('Mismatched hook-format "${field.name}". expects: onEnter_<region>_<State>[_<SubState>].', field.pos);
 						}
 					}
 				default:
@@ -192,15 +194,17 @@ class EnumStatesMacro {
 			var prevIdent:Expr = {expr: EConst(CIdent(prevVar)), pos: reg.pos};
 			var nextIdent:Expr = {expr: EConst(CIdent(nextVar)), pos: reg.pos};
 
+			// TODO optimizing to generate if/else blocks if have enter AND exit hooks
+			// for this it is need to replace "emit" by "emit_enter" and "emit_exit" to fill 2 different emit-queues 
+			// if (exitHooks.exists(rName) && enterHooks.exists(rName) ) {
+
 			if (exitHooks.exists(rName)) {
 				for (hook in exitHooks.get(rName)) {
 					var pattern = buildHierarchicalPattern(resolvedRegType, hook.path, hook.pos);
 					var fnName = hook.fn;
-					regionLifecycleExprs.push(macro {
-						if ($prevIdent.match($pattern) && !$nextIdent.match($pattern)) {
-							this.$fnName();
-						}
-					});
+					regionLifecycleExprs.push(macro 
+						if ($prevIdent.match($pattern) && !$nextIdent.match($pattern)) this.$fnName()
+					);
 				}
 			}
 
@@ -208,25 +212,17 @@ class EnumStatesMacro {
 				for (hook in enterHooks.get(rName)) {
 					var pattern = buildHierarchicalPattern(resolvedRegType, hook.path, hook.pos);
 					var fnName = hook.fn;
-					regionLifecycleExprs.push(macro {
-						if (!$prevIdent.match($pattern) && $nextIdent.match($pattern)) {
-							this.$fnName();
-						}
-					});
-					initialEntryExprs.push(macro {
-						if (this.$rName.match($pattern)) {
-							this.$fnName();
-						}
-					});
+					regionLifecycleExprs.push(macro 
+						if (!$prevIdent.match($pattern) && $nextIdent.match($pattern)) this.$fnName()
+					);
+					initialEntryExprs.push(macro 
+						if (this.$rName.match($pattern)) this.$fnName()
+					);
 				}
 			}
 
 			if (regionLifecycleExprs.length > 0) {
-				lifecycleExprs.push(macro {
-					if ($prevIdent != $nextIdent) {
-						$b{regionLifecycleExprs};
-					}
-				});
+				lifecycleExprs.push(macro if ($prevIdent != $nextIdent) $b{regionLifecycleExprs} );
 			}
 
 			// rekursive Serialization & Deserialisation (supports nested Sub-State-Enums)
@@ -815,6 +811,12 @@ class EnumStatesMacro {
 						default:
 					}
 
+					// TODO: split hookNotes into hookNotesEnter and hookNotesExit
+					//  add for end-states additional:
+					//  state $name { 
+					//      state "PlayAnim(run), SetDustTrail(true)" as OnEnterRunning
+					//      state "exit_SetDustTrail(false)" as OnExitRunning }
+
 					if (hasHooks) {
 						if (hasSubEnum) {
 							// buf.add('$indent$name : ${hookNotes.get(name).join(", ")}\n');
@@ -825,7 +827,7 @@ class EnumStatesMacro {
 						}
 					}
 
-					// Atomarer Zustand ohne Hooks -> trotzdem explizit im Block aufführen
+					// atomic State without Hooks -> still put it in the block
 					if (!hasHooks && !hasSubEnum) {
 						buf.add('$indent$name\n');
 					}
