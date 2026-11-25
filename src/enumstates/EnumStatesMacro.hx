@@ -750,9 +750,12 @@ class EnumStatesMacro {
 	):String {
 		var buf = new StringBuf();
 		buf.add("stateDiagram-v2\n");
+	
 		buf.add('    [*] --> $className\n\n');
 		buf.add('    state $className {\n');
 	
+		var collectColorClasses:String = "";
+		
 		for (i in 0...regions.length) {
 			var reg = regions[i];
 			if (i > 0) buf.add("\n        --\n\n");
@@ -760,9 +763,10 @@ class EnumStatesMacro {
 			buf.add('        state ${reg.name} {\n');
 			var resolvedType = Context.resolveType(reg.type, reg.pos);
 			var initExpr = regionInits.get(reg.name);
-			var hookNotes = showHooks ? collectHookDescriptions(reg.name, enterHooks, exitHooks, allFunctions) : new Map<String, Array<String>>();
+			var hookNotesEnter = showHooks ? collectHookEnter(reg.name, enterHooks, allFunctions) : new Map<String, Array<String>>();
+			var hookNotesExit = showHooks ? collectHookExit(reg.name, exitHooks, allFunctions) : new Map<String, Array<String>>();
 			
-			writeEnumStates(buf, resolvedType, initExpr, hookNotes, "            ");
+			writeEnumStates(buf, resolvedType, initExpr, hookNotesEnter, hookNotesExit, "            ");
 			buf.add("\n");
 	
 			var updateFn = allFunctions.get('update_${reg.name}');
@@ -771,8 +775,17 @@ class EnumStatesMacro {
 				extractTransitions(buf, updateFn.expr, reg.name, i, reg.name, resolvedType, regions, allFunctions, seenEdges, showGuards, "            ", false);
 			}
 			buf.add("        }\n");
+			// for coloring the enter/exit hooks
+			for (n in hookNotesEnter.keys()) collectColorClasses += "class OnEnterHook" + n + " green\n";
+			for (n in hookNotesEnter.keys()) collectColorClasses += "class OnExitHook" + n + " red\n";
 		}
 		buf.add("    }\n");
+
+		// colors for enter/exit
+		buf.add('classDef green fill:#d4edda,stroke:#28a745,color:#155724\n');
+		buf.add('classDef red fill:#f8d7da,stroke:#dc3545,color:#721c24,font-weight:bold\n');
+		buf.add(collectColorClasses);
+		
 		return buf.toString();
 	}
 
@@ -780,7 +793,8 @@ class EnumStatesMacro {
 		buf:StringBuf,
 		type:Type,
 		initExpr:Null<Expr>,
-		hookNotes:Map<String, Array<String>>,
+		hookNotesEnter:Map<String, Array<String>>,
+		hookNotesExit:Map<String, Array<String>>,
 		indent:String
 	):Void {
 		switch (Context.follow(type)) {
@@ -791,9 +805,9 @@ class EnumStatesMacro {
 				}
 	
 				for (name => ctor in enumType.constructs) {
-					var hasHooks = hookNotes.exists(name);
+					var hasHooksEnter = hookNotesEnter.exists(name);
+					var hasHooksExit = hookNotesExit.exists(name);
 
-					// Prüfen, ob der Konstruktor selbst wieder ein Composite-State (Sub-Enum) ist
 					var hasSubEnum = false;
 					switch (ctor.type) {
 						case TFun(args, _):
@@ -803,7 +817,17 @@ class EnumStatesMacro {
 										hasSubEnum = true;
 										var subInit = (initInfo != null && initInfo.name == name && initInfo.args.length > argIdx) ? initInfo.args[argIdx] : null;
 										buf.add('${indent}state $name {\n');
-										writeEnumStates(buf, args[argIdx].t, subInit, hookNotes, indent + "    ");
+										writeEnumStates(buf, args[argIdx].t, subInit, hookNotesEnter, hookNotesExit, indent + "    ");
+
+										if (hasHooksEnter) {
+											var notes = StringTools.replace(hookNotesEnter.get(name).join(", "), '"', "");
+											buf.add('${indent + "    "}state "$notes" as OnEnterHook$name\n');
+										}
+										if (hasHooksExit) {
+											var notes = StringTools.replace(hookNotesExit.get(name).join(", "), '"', "");
+											buf.add('${indent + "    "}state "$notes" as OnExitHook$name\n');
+										}
+
 										buf.add('$indent}\n');
 									default:
 								}
@@ -811,25 +835,20 @@ class EnumStatesMacro {
 						default:
 					}
 
-					// TODO: split hookNotes into hookNotesEnter and hookNotesExit
-					//  add for end-states additional:
-					//  state $name { 
-					//      state "PlayAnim(run), SetDustTrail(true)" as OnEnterRunning
-					//      state "exit_SetDustTrail(false)" as OnExitRunning }
-
-					if (hasHooks) {
-						if (hasSubEnum) {
-							// buf.add('$indent$name : ${hookNotes.get(name).join(", ")}\n');
-							buf.add('${indent}note left of $name : ${hookNotes.get(name).join(", ")}\n');
+					if(!hasSubEnum) {
+						if (hasHooksEnter) {
+							var notes = StringTools.replace(hookNotesEnter.get(name).join(", "), '"', "");
+							buf.add('${indent}state $name {\n');
+							buf.add('${indent + "    "}state "$notes" as OnEnterHook$name\n');
+							buf.add('$indent}\n');
 						}
-						else {
-							for (note in hookNotes.get(name)) buf.add('$indent$name : $note\n');
+						if (hasHooksExit) {
+							var notes = StringTools.replace(hookNotesExit.get(name).join(", "), '"', "");
+							buf.add('${indent}state $name {\n');
+							buf.add('${indent + "    "}state "$notes" as OnExitHook$name\n');
+							buf.add('$indent}\n');
 						}
-					}
-
-					// atomic State without Hooks -> still put it in the block
-					if (!hasHooks && !hasSubEnum) {
-						buf.add('$indent$name\n');
+						if (!hasHooksEnter && !hasHooksExit) buf.add('$indent$name\n');
 					}
 
 				}
@@ -837,27 +856,40 @@ class EnumStatesMacro {
 		}
 	}
 	
-	private static function collectHookDescriptions(
+	private static function collectHookEnter(
 		regName:String,
 		enterHooks:Map<String, Array<HookInfo>>,
+		allFunctions:Map<String, Function>
+	):Map<String, Array<String>> {
+		var map = new Map<String, Array<String>>();
+		var hooks = enterHooks.get(regName);
+		if (hooks != null) for (h in hooks) {
+			var stateName = h.path[h.path.length - 1];
+			var actions = extractHookActions(allFunctions.get(h.fn));
+			var text = h.fn + (actions.length > 0 ? ":<br>"+actions.join(", ") : "");
+			if (!map.exists(stateName)) map.set(stateName, []);
+			map.get(stateName).push(text);
+		}
+		return map;
+	}
+
+	private static function collectHookExit(
+		regName:String,
 		exitHooks:Map<String, Array<HookInfo>>,
 		allFunctions:Map<String, Function>
 	):Map<String, Array<String>> {
 		var map = new Map<String, Array<String>>();
-		var addNote = function(prefix:String, hooks:Array<HookInfo>) {
-			if (hooks == null) return;
-			for (h in hooks) {
-				var stateName = h.path[h.path.length - 1];
-				var actions = extractHookActions(allFunctions.get(h.fn));
-				var text = actions.length > 0 ? '$prefix / ${actions.join(", ")}' : '$prefix / ${h.fn}()';
-				if (!map.exists(stateName)) map.set(stateName, []);
-				map.get(stateName).push(text);
-			}
-		};
-		addNote("entry", enterHooks.get(regName));
-		addNote("exit", exitHooks.get(regName));
+		var hooks = exitHooks.get(regName);
+		if (hooks != null) for (h in hooks) {
+			var stateName = h.path[h.path.length - 1];
+			var actions = extractHookActions(allFunctions.get(h.fn));
+			var text = h.fn + (actions.length > 0 ? ":<br>"+actions.join(", ") : "");
+			if (!map.exists(stateName)) map.set(stateName, []);
+			map.get(stateName).push(text);
+		}
 		return map;
 	}
+	
 	
 	private static function extractHookActions(fn:Null<Function>):Array<String> {
 		var list:Array<String> = [];
